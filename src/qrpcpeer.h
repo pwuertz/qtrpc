@@ -46,6 +46,7 @@ public slots:
      * after that. It may also be destroyed before if the response is of no interest.
      */
     QRpcResponse* sendRequest(QString method, QVariant data);
+    QRpcResponse* sendRequest(QString method, QVariantList data);
 
     /*
      * Send event to the peer.

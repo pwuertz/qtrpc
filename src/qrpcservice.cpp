@@ -10,28 +10,37 @@
 QVariant invokeAutoConvert(QObject* object, QMetaMethod metaMethod, QVariantList args)
 {
     // check if number of incoming args is sufficient or larger
-    QList<QByteArray> methodTypes = metaMethod.parameterTypes();
-    if (methodTypes.size() > args.size()) {
+    if (metaMethod.parameterCount() > args.size()) {
         qWarning() << "Insufficient arguments to call" << metaMethod.methodSignature();
         return QVariant();
     }
 
     // make a copy of incoming args and convert them to target types
     QVariantList converted;
-    for (int i = 0; i < methodTypes.size(); i++) {
+    for (int i = 0; i < metaMethod.parameterCount(); i++) {
         const QVariant& arg = args.at(i);
-        QByteArray methodTypeName = methodTypes.at(i);
-        QByteArray argTypeName = arg.typeName();
-        QVariant::Type methodType = QVariant::nameToType(methodTypeName);
         QVariant copy = QVariant(arg);
-        if (copy.type() != methodType) {
-            if (copy.canConvert(methodType)) {
-                if (!copy.convert(methodType)) {
-                    qWarning() << "Conversion from" << argTypeName << "to" << methodTypeName << "failed";
+        QMetaType::Type paramType = static_cast<QMetaType::Type>(metaMethod.parameterType(i));
+        QMetaType::Type argType = static_cast<QMetaType::Type>(copy.type());
+        bool paramIsVariant = (paramType == QMetaType::QVariant);
+        bool needConversion = !paramIsVariant && (argType != paramType);
+        if (needConversion) {
+            if (!copy.canConvert(paramType)) {
+                // special treatment for ->double conversion (e.g. long to double not allowed)
+                if (paramType == QMetaType::Double) {
+                    bool ok;
+                    copy = copy.toDouble(&ok);
+                    if (!ok) {
+                        qWarning() << "Cannot convert" << arg.typeName() << "to" << QMetaType::typeName(paramType);
+                        return QVariant();
+                    }
+                } else {
+                    qWarning() << "Cannot convert" << arg.typeName() << "to" << QMetaType::typeName(paramType);
                     return QVariant();
                 }
-            } else {
-                qWarning() << "Cannot convert" << argTypeName << "to" << methodTypeName;
+            }
+            if (!copy.convert(paramType)) {
+                qWarning() << "Error converting" << arg.typeName() << "to" << QMetaType::typeName(paramType);
                 return QVariant();
             }
         }
@@ -51,13 +60,10 @@ QVariant invokeAutoConvert(QObject* object, QMetaMethod metaMethod, QVariantList
 
     // build generic argument for return type
     QVariant returnValue;
-    if (metaMethod.returnType() != QMetaType::Void) {
+    QMetaType::Type returnType = static_cast<QMetaType::Type>(metaMethod.returnType());
+    if (returnType != QMetaType::Void && returnType != QMetaType::QVariant)
         returnValue = QVariant(metaMethod.returnType(), static_cast<void*>(nullptr));
-    }
-    QGenericReturnArgument returnArgument(
-        metaMethod.typeName(),
-        const_cast<void*>(returnValue.constData())
-    );
+    QGenericReturnArgument returnArgument(metaMethod.typeName(), const_cast<void*>(returnValue.constData()));
 
     // invoke method
     bool ok = metaMethod.invoke(object, Qt::DirectConnection, returnArgument,

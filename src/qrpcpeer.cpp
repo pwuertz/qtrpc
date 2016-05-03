@@ -42,6 +42,11 @@ QRpcPeer::~QRpcPeer()
 {
 }
 
+QRpcResponse* QRpcPeer::sendRequest(QString method, QVariantList data)
+{
+    return sendRequest(method, QVariant(data));
+}
+
 QRpcResponse* QRpcPeer::sendRequest(QString method, QVariant data)
 {
     // send request and create response
