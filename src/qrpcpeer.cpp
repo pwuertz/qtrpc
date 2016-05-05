@@ -5,16 +5,56 @@
 #include <cstdint>
 #include <QIODevice>
 #include <QTimer>
+#include <QByteArray>
 #include <QDebug>
 #include "qrpcrequest.h"
 #include "qrpcresponse.h"
 
+
+class WriteBuffer {
+    // TODO: this should be implemented as ring buffer
+public:
+    WriteBuffer(QIODevice* device, QObject* ctx) : m_device(device) {
+        QObject::connect(device, &QIODevice::bytesWritten, ctx, [this](){
+            // device finished writing, check for buffered data
+            if (!m_buffer.isEmpty()) {
+                // try to write buffered data to device
+                auto n_buffer = m_buffer.size();
+                const char* p = m_buffer.constData() + m_buffer_pos;
+                auto n_written = m_device->write(p, n_buffer - m_buffer_pos);
+                m_buffer_pos += n_written;
+                // clear buffer when done
+                if (m_buffer_pos == n_buffer) {
+                    m_buffer.clear();
+                    m_buffer_pos = 0;
+                }
+            }
+        });
+    }
+
+    void write(const char *data, qint64 n_data) {
+        if (!m_buffer.isEmpty()) {
+            // append new data to buffer if there is queued data
+            m_buffer.append(data, n_data);
+        } else {
+            // try to write new data to device
+            auto n_written = m_device->write(data, n_data);
+            // append residual data to buffer
+            if (n_written < n_data)
+                m_buffer.append(data + n_written, n_data - n_written);
+        }
+    }
+
+    QIODevice* m_device;
+    QByteArray m_buffer;
+    int m_buffer_pos = 0;
+};
+
+
 class QRpcPeer::Private {
 public:
-    // TODO: QIODevice is not a sufficient Stream implementation for MsgpackRpcProtocol since write() may transfer fewer bytes than supplied
-    // -> need write buffer on top of QIODevice
     Private(QRpcPeer* base, QIODevice* device) :
-        b(base), m_device(device), m_protocol(*device, *this) {}
+        b(base), m_device(device), m_buffered_device(device, base), m_protocol(*device, m_buffered_device, *this) {}
 
     void handleRequest(const std::string& method, const msgpack::object& o, std::uint64_t id);
     void handleResponse(std::uint64_t id, const msgpack::object& o);
@@ -23,7 +63,8 @@ public:
 
     QRpcPeer* b;
     QIODevice* m_device;
-    MsgpackRpcProtocol<QIODevice, Private> m_protocol;
+    WriteBuffer m_buffered_device;
+    MsgpackRpcProtocol<QIODevice, WriteBuffer, Private> m_protocol;
     std::uint64_t m_id_count = 1;
     std::map<std::uint64_t, QRpcResponse*> m_pending_responses;
     std::map<std::uint64_t, QRpcRequest*> m_pending_requests;

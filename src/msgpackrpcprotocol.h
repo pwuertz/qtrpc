@@ -7,19 +7,19 @@
 #include <msgpack.hpp>
 
 
-template <class Stream, class Handler>
+template <class IStream, class OStream, class Handler>
 class MsgpackRpcProtocol
 {
 public:
     enum class MessageType {Request = 1, Response = 2, Error = 3, Event = 4};
 
-    Stream& m_stream;
+    IStream& m_istream;
     Handler& m_handler;
-    msgpack::packer<Stream> m_packer;
+    msgpack::packer<OStream> m_packer;
     msgpack::unpacker m_unpacker;
 
-    MsgpackRpcProtocol(Stream& stream, Handler& handler) :
-        m_stream(stream), m_handler(handler), m_packer(m_stream) {}
+    MsgpackRpcProtocol(IStream& istream, OStream& ostream, Handler& handler) :
+        m_istream(istream), m_handler(handler), m_packer(ostream) {}
 
     void readAvailableBytes();
 
@@ -36,12 +36,12 @@ public:
 };
 
 
-template <class Stream, class Handler>
-inline void MsgpackRpcProtocol<Stream, Handler>::readAvailableBytes() {
+template <class IStream, class OStream, class Handler>
+inline void MsgpackRpcProtocol<IStream, OStream, Handler>::readAvailableBytes() {
     // read available bytes from stream to unpacker
-    auto n_avail = m_stream.bytesAvailable();
+    auto n_avail = m_istream.bytesAvailable();
     m_unpacker.reserve_buffer(n_avail);
-    auto n_read = m_stream.read(m_unpacker.buffer(), n_avail);
+    auto n_read = m_istream.read(m_unpacker.buffer(), n_avail);
     m_unpacker.buffer_consumed(n_read);
 
     // deserialize msgpack objects from stream
@@ -82,9 +82,9 @@ inline void MsgpackRpcProtocol<Stream, Handler>::readAvailableBytes() {
 }
 
 
-template <class Stream, class Handler>
+template <class IStream, class OStream, class Handler>
 template <typename T>
-inline void MsgpackRpcProtocol<Stream, Handler>::sendRequest(const std::string& method, const T& v, std::uint64_t id) {
+inline void MsgpackRpcProtocol<IStream, OStream, Handler>::sendRequest(const std::string& method, const T& v, std::uint64_t id) {
     m_packer.pack_array(4);
     m_packer.pack(static_cast<std::uint8_t>(MessageType::Request));
     m_packer.pack(method);
@@ -93,9 +93,9 @@ inline void MsgpackRpcProtocol<Stream, Handler>::sendRequest(const std::string& 
 }
 
 
-template <class Stream, class Handler>
+template <class IStream, class OStream, class Handler>
 template <typename T>
-inline void MsgpackRpcProtocol<Stream, Handler>::sendResponse(std::uint64_t id, const T& v) {
+inline void MsgpackRpcProtocol<IStream, OStream, Handler>::sendResponse(std::uint64_t id, const T& v) {
     m_packer.pack_array(3);
     m_packer.pack(static_cast<std::uint8_t>(MessageType::Response));
     m_packer.pack(id);
@@ -103,8 +103,8 @@ inline void MsgpackRpcProtocol<Stream, Handler>::sendResponse(std::uint64_t id, 
 }
 
 
-template <class Stream, class Handler>
-inline void MsgpackRpcProtocol<Stream, Handler>::sendError(std::uint64_t id, const std::string& errorstr) {
+template <class IStream, class OStream, class Handler>
+inline void MsgpackRpcProtocol<IStream, OStream, Handler>::sendError(std::uint64_t id, const std::string& errorstr) {
     m_packer.pack_array(3);
     m_packer.pack(static_cast<std::uint8_t>(MessageType::Error));
     m_packer.pack(id);
@@ -112,9 +112,9 @@ inline void MsgpackRpcProtocol<Stream, Handler>::sendError(std::uint64_t id, con
 }
 
 
-template <class Stream, class Handler>
+template <class IStream, class OStream, class Handler>
 template <typename T>
-inline void MsgpackRpcProtocol<Stream, Handler>::sendEvent(const std::string& name, const T& v) {
+inline void MsgpackRpcProtocol<IStream, OStream, Handler>::sendEvent(const std::string& name, const T& v) {
     m_packer.pack_array(3);
     m_packer.pack(static_cast<std::uint8_t>(MessageType::Event));
     m_packer.pack(name);
