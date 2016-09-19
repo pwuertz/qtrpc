@@ -75,7 +75,13 @@ QRpcPeer::QRpcPeer(QIODevice* device, QObject *parent) : QObject(parent)
     p = std::unique_ptr<Private>(new Private(this, device));
 
     connect(device, &QIODevice::readyRead, this, [this]() {
-        p->m_protocol.readAvailableBytes();
+        try {
+            p->m_protocol.readAvailableBytes();
+        } catch (const std::runtime_error& e) {
+            // close stream on error
+            qWarning() << "QRpcPeer:" << e.what();
+            p->m_device->close();
+        }
     });
 }
 
