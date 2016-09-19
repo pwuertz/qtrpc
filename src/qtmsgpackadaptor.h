@@ -15,29 +15,37 @@ struct pack<QVariant> {
     template <typename Stream>
     packer<Stream>& operator()(msgpack::packer<Stream>& o, QVariant const& v) const {
         // packing member variables as an array.
-        switch (v.type()) {
-        case QVariant::Type::Invalid:
+        switch (static_cast<QMetaType::Type>(v.type())) {
+        case QMetaType::UnknownType:
+        case QMetaType::Void:
             o.pack_nil();
             break;
-        case QVariant::Type::Bool:
+        case QMetaType::Bool:
             o.pack(v.toBool());
             break;
-        case QVariant::Type::Int:
+        case QMetaType::Char:
+        case QMetaType::Short:
+        case QMetaType::Int:
             o.pack(v.toInt());
             break;
-        case QVariant::Type::UInt:
+        case QMetaType::UChar:
+        case QMetaType::UShort:
+        case QMetaType::UInt:
             o.pack(v.toUInt());
             break;
-        case QVariant::Type::LongLong:
+        case QMetaType::Long:
+        case QMetaType::LongLong:
             o.pack(v.toLongLong());
             break;
-        case QVariant::Type::ULongLong:
+        case QMetaType::ULong:
+        case QMetaType::ULongLong:
             o.pack(v.toULongLong());
             break;
-        case QVariant::Type::Double:
+        case QMetaType::Float:
+        case QMetaType::Double:
             o.pack(v.toDouble());
             break;
-        case QVariant::Type::List:
+        case QMetaType::QVariantList:
         {
             QList<QVariant> list = v.toList();
             o.pack_array(list.size());
@@ -45,10 +53,22 @@ struct pack<QVariant> {
                 o.pack(*i);
         }
             break;
-        case QVariant::Type::String:
+        case QMetaType::QVariantMap:
+        {
+            QMap<QString, QVariant> map = v.toMap();
+            QMap<QString, QVariant>::const_iterator it = map.constBegin();
+            o.pack_map(map.size());
+            while (it != map.constEnd()) {
+                o.pack(it.key());
+                o.pack(it.value());
+                ++it;
+            }
+        }
+            break;
+        case QMetaType::QString:
             o.pack(v.toString());
             break;
-        case QVariant::Type::StringList:
+        case QMetaType::QStringList:
         {
             QList<QString> list = v.toStringList();
             o.pack_array(list.size());
@@ -56,10 +76,14 @@ struct pack<QVariant> {
                 o.pack(*i);
         }
             break;
-        case QVariant::Type::ByteArray:
+        case QMetaType::QByteArray:
             o.pack(v.toByteArray());
             break;
         default:
+        {
+            auto tname = QMetaType::typeName(static_cast<QMetaType::Type>(v.type()));
+            qWarning() << "qtmsgpackadaptor: no conversion for" << tname;
+        }
             o.pack_nil();
             break;
         }
@@ -82,10 +106,10 @@ struct convert<QVariant> {
             v.setValue(o.as<double>());
             break;
         case msgpack::type::POSITIVE_INTEGER:
-            v.setValue(o.as<std::uint64_t>());
+            v.setValue(o.as<qulonglong>());
             break;
         case msgpack::type::NEGATIVE_INTEGER:
-            v.setValue(o.as<std::int64_t>());
+            v.setValue(o.as<qlonglong>());
             break;
         case msgpack::type::STR:
             v.setValue(o.as<QString>());
@@ -99,6 +123,17 @@ struct convert<QVariant> {
             for (unsigned int i = 0; i < o.via.array.size; ++i)
                 list << o.via.array.ptr[i].as<QVariant>();
             v.setValue(list);
+        }
+            break;
+        case msgpack::type::MAP:
+        {
+            QVariantMap map;
+            for (unsigned int i = 0; i < o.via.map.size; ++i) {
+                QString key(o.via.map.ptr[i].key.as<QString>());
+                QVariant val(o.via.map.ptr[i].val.as<QVariant>());
+                map.insert(key, val);
+            }
+            v.setValue(map);
         }
             break;
         default:
