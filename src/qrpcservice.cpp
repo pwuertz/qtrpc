@@ -170,8 +170,12 @@ void QRpcServiceBase::handleNewRequest(QRpcRequest *request)
                 else
                     args.append(reqData);
             }
-            retval = invokeAutoConvert(o, method, args);
-            request->setResult(retval);
+			try {
+				retval = invokeAutoConvert(o, method, args);
+				request->setResult(retval);
+			}
+			catch (const std::runtime_error& e) { request->setError(e.what()); }
+			catch (...) { request->setError("unhandled exception"); }
         }
     }
 
