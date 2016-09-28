@@ -89,7 +89,7 @@ QRpcServiceBase::QRpcServiceBase(QTcpServer* server, QObject *parent) : QObject(
         while ((socket = m_server->nextPendingConnection())) {
             auto peer = new QRpcPeer(socket);
             // handle new rpc requests
-            connect(peer, &QRpcPeer::newRequest, this, &QRpcService::handleNewRequest);
+            connect(peer, &QRpcPeer::newRequest, this, &QRpcService::handleNewRequest, Qt::QueuedConnection);  // TODO: direct connection causes memory corruption?
             // remember peer
             m_peers.emplace(peer);
             // delete socket and peer on disconnect  // TODO: sockets and peers are probably never destroyed if service is destroyed first
