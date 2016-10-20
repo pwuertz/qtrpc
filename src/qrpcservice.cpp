@@ -152,11 +152,13 @@ void QRpcServiceBase::handleNewRequest(QRpcRequest *request)
     try {
         o = m_reg_name_to_obj.at(obj_name);
     } catch (const std::out_of_range& e) {
-        request->error("rpc object not found");
+        request->setError("rpc object not found");
+        request->deleteLater();
         return;
     }
 
     // find method
+    bool method_found = false;
     const QMetaObject* mo = o->metaObject();
     for (int i = mo->methodOffset(); i < mo->methodCount(); ++i) {
         QMetaMethod method = mo->method(i);
@@ -173,13 +175,25 @@ void QRpcServiceBase::handleNewRequest(QRpcRequest *request)
 			try {
 				retval = invokeAutoConvert(o, method, args);
 				request->setResult(retval);
+                request->deleteLater();
 			}
-			catch (const std::runtime_error& e) { request->setError(e.what()); }
-			catch (...) { request->setError("unhandled exception"); }
+            catch (const std::runtime_error& e) {
+                request->setError(e.what());
+                request->deleteLater();
+            }
+            catch (...) {
+                request->setError("unhandled exception");
+                request->deleteLater();
+            }
+            method_found = true;
+            break;
         }
     }
 
-    // TODO: handle method not found
+    if (!method_found) {
+        request->setError("rpc method not found");
+        request->deleteLater();
+    }
 }
 
 void QRpcServiceBase::handleRegisteredObjectSignal()
