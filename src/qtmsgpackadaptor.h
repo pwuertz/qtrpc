@@ -157,7 +157,7 @@ struct pack<QString> {
 template<>
 struct convert<QString> {
     msgpack::object const& operator()(msgpack::object const& o, QString& v) const {
-        if (o.type != msgpack::type::STR)
+        if (o.type != msgpack::type::STR && o.type != msgpack::type::BIN)
             throw msgpack::type_error();
         v = QString::fromUtf8(o.via.str.ptr, o.via.str.size);  // deep copy for now
         return o;
