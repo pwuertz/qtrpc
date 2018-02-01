@@ -123,12 +123,10 @@ QIODevice* QRpcPeer::device()
 void QRpcPeer::Private::handleRequest(const std::string& method, const msgpack::object& o, std::uint64_t id)
 {
     QRpcRequest* request;
-    try {
-        // remove and disconnect previous requests in case of id conflicts
-        request = m_pending_requests.at(id);
-        request->disconnect(request, 0, b, 0);
-    } catch (const std::out_of_range& e) {
-    }
+    // disconnect and thus remove previous requests in case of id conflicts
+    auto request_iter = m_pending_requests.find(id);
+    if (request_iter != m_pending_requests.end())
+        request_iter->second->disconnect(request_iter->second, 0, b, 0);
 
     // create new pending request
     request = new QRpcRequest(QString::fromStdString(method), o.as<QVariant>(), id, b);
