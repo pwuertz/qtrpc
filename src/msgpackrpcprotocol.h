@@ -47,7 +47,7 @@ inline void MsgpackRpcProtocol<IStream, OStream, Handler>::readAvailableBytes() 
     // deserialize msgpack objects from stream
     msgpack::unpacked unpacked;
     try {
-        while (m_unpacker.next(&unpacked)) {
+        while (m_unpacker.next(unpacked)) {
             // message is array of objects
             std::vector<msgpack::object> message;
             unpacked.get().convert(message);
