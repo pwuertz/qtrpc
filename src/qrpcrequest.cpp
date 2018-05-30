@@ -3,18 +3,19 @@
 #include <QTimer>
 #include <QDebug>
 
-QRpcRequest::QRpcRequest(const QString& method, const QVariant& data, quint64 id, QRpcPeer* peer, QObject *parent) :
-    QObject(parent), m_method(method), m_data(data), m_id(id), m_peer(peer), m_result_set(false)
+QRpcRequest::QRpcRequest(QString method, QVariant data, quint64 id, QRpcPeer* peer, QObject *parent)
+    : QObject(parent)
+    , m_method(std::move(method))
+    , m_data(std::move(data))
+    , m_id(id)
+    , m_peer(peer)
 {
-    connect(peer, &QRpcPeer::destroyed, this, [this](){
+    connect(peer, &QRpcPeer::destroyed, this, [this]() {
         m_peer = nullptr;
     });
 }
 
-QRpcRequest::~QRpcRequest()
-{
-
-}
+QRpcRequest::~QRpcRequest() = default;
 
 const QString &QRpcRequest::method()
 {
@@ -31,22 +32,22 @@ void QRpcRequest::setResult(const QVariant &v)
     m_result_set = true;
     m_result = v;
     // TODO: force queued connection here?
-    finished();
-    disconnect(this, &QRpcRequest::error, 0, 0);
-    disconnect(this, &QRpcRequest::finished, 0, 0);
+    emit finished();
+    disconnect(this, &QRpcRequest::error, nullptr, nullptr);
+    disconnect(this, &QRpcRequest::finished, nullptr, nullptr);
 }
 
 void QRpcRequest::setError(const QString &e)
 {
     m_error = e;
     // TODO: force queued connection here?
-    error(m_error);
-    finished();
-    disconnect(this, &QRpcRequest::error, 0, 0);
-    disconnect(this, &QRpcRequest::finished, 0, 0);
+    emit error(m_error);
+    emit finished();
+    disconnect(this, &QRpcRequest::error, nullptr, nullptr);
+    disconnect(this, &QRpcRequest::finished, nullptr, nullptr);
 }
 
-QRpcPeer *QRpcRequest::peer()
+QRpcPeer* QRpcRequest::peer()
 {
     return m_peer;
 }

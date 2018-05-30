@@ -3,37 +3,36 @@
 #include <QTimer>
 #include <QDebug>
 
-QRpcResponse::QRpcResponse(quint64 id, QRpcPeer* peer, QObject *parent) :
-    QObject(parent), m_id(id), m_peer(peer), m_result_set(false)
+QRpcResponse::QRpcResponse(quint64 id, QRpcPeer* peer, QObject* parent)
+    : QObject(parent)
+    , m_id(id)
+    , m_peer(peer)
 {
     connect(peer, &QRpcPeer::destroyed, this, [this](){
         m_peer = nullptr;
     });
 }
 
-QRpcResponse::~QRpcResponse()
-{
-
-}
+QRpcResponse::~QRpcResponse() = default;
 
 void QRpcResponse::setResult(const QVariant &v)
 {
     m_result_set = true;
     m_result = v;
     // TODO: force queued connection here?
-    finished();
-    disconnect(this, &QRpcResponse::error, 0, 0);
-    disconnect(this, &QRpcResponse::finished, 0, 0);
+    emit finished();
+    disconnect(this, &QRpcResponse::error, nullptr, nullptr);
+    disconnect(this, &QRpcResponse::finished, nullptr, nullptr);
 }
 
 void QRpcResponse::setError(const QString &e)
 {
     m_error = e;
     // TODO: force queued connection here?
-    error(m_error);
-    finished();
-    disconnect(this, &QRpcResponse::error, 0, 0);
-    disconnect(this, &QRpcResponse::finished, 0, 0);
+    emit error(m_error);
+    emit finished();
+    disconnect(this, &QRpcResponse::error, nullptr, nullptr);
+    disconnect(this, &QRpcResponse::finished, nullptr, nullptr);
 }
 
 QVariant QRpcResponse::result()

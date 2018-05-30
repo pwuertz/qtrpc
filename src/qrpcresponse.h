@@ -12,7 +12,7 @@ class QRpcResponse : public QObject
 {
     Q_OBJECT
 public:
-    virtual ~QRpcResponse();
+    ~QRpcResponse() override;
 
 signals:
     void error(const QString& e);
@@ -26,12 +26,12 @@ public slots:
 
 protected:
     friend class QRpcPeer;
-    explicit QRpcResponse(quint64 id, QRpcPeer* peer, QObject *parent = 0);
+    explicit QRpcResponse(quint64 id, QRpcPeer* peer, QObject* parent = nullptr);
     void setResult(const QVariant& v);
     void setError(const QString& e);
-    quint64 m_id;
-    QRpcPeer* m_peer;
-    bool m_result_set;
+    quint64 m_id = 0;
+    QRpcPeer* m_peer = nullptr;
+    bool m_result_set = false;
     QVariant m_result;
     QString m_error;
 };

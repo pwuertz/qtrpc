@@ -1,6 +1,7 @@
 #ifndef QTMSGPACKADAPTOR_H
 #define QTMSGPACKADAPTOR_H
 
+#include <QDebug>
 #include <QVariant>
 #include <QString>
 #include <QByteArray>
@@ -49,8 +50,9 @@ struct pack<QVariant> {
         {
             QList<QVariant> list = v.toList();
             o.pack_array(list.size());
-            for (auto i = list.begin(); i != list.end(); ++i)
-                o.pack(*i);
+            for (const auto& value: list) {
+                o.pack(value);
+            }
         }
             break;
         case QMetaType::QVariantMap:
@@ -72,8 +74,9 @@ struct pack<QVariant> {
         {
             QList<QString> list = v.toStringList();
             o.pack_array(list.size());
-            for (auto i = list.begin(); i != list.end(); ++i)
-                o.pack(*i);
+            for (const auto& value: list) {
+                o.pack(value);
+            }
         }
             break;
         case QMetaType::QByteArray:
@@ -120,8 +123,9 @@ struct convert<QVariant> {
         case msgpack::type::ARRAY:
         {
             QVariantList list;
-            for (unsigned int i = 0; i < o.via.array.size; ++i)
+            for (unsigned int i = 0; i < o.via.array.size; ++i) {
                 list << o.via.array.ptr[i].as<QVariant>();
+            }
             v.setValue(list);
         }
             break;
@@ -157,9 +161,10 @@ struct pack<QString> {
 template<>
 struct convert<QString> {
     msgpack::object const& operator()(msgpack::object const& o, QString& v) const {
-        if (o.type != msgpack::type::STR && o.type != msgpack::type::BIN)
+        if (o.type != msgpack::type::STR && o.type != msgpack::type::BIN) {
             throw msgpack::type_error();
-        v = QString::fromUtf8(o.via.str.ptr, o.via.str.size);  // deep copy for now
+        }
+        v = QString::fromUtf8(o.via.str.ptr, static_cast<int>(o.via.str.size));  // deep copy for now
         return o;
     }
 };
@@ -177,9 +182,10 @@ struct pack<QByteArray> {
 template<>
 struct convert<QByteArray> {
     msgpack::object const& operator()(msgpack::object const& o, QByteArray& v) const {
-        if (o.type != msgpack::type::BIN)
+        if (o.type != msgpack::type::BIN) {
             throw msgpack::type_error();
-        v = QByteArray(o.via.bin.ptr, o.via.bin.size);  // deep copy for now
+        }
+        v = QByteArray(o.via.bin.ptr, static_cast<int>(o.via.bin.size));  // deep copy for now
         return o;
     }
 };

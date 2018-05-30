@@ -7,7 +7,7 @@
 
 
 // call QMetaMethod with conversion from QVariant (based on https://gist.github.com/andref/2838534)
-QVariant invokeAutoConvert(QObject* object, QMetaMethod metaMethod, QVariantList args)
+QVariant invokeAutoConvert(QObject* object, const QMetaMethod& metaMethod, const QVariantList& args)
 {
     // check if number of incoming args is sufficient or larger
     if (metaMethod.parameterCount() > args.size()) {
@@ -20,8 +20,8 @@ QVariant invokeAutoConvert(QObject* object, QMetaMethod metaMethod, QVariantList
     for (int i = 0; i < metaMethod.parameterCount(); i++) {
         const QVariant& arg = args.at(i);
         QVariant copy = QVariant(arg);
-        QMetaType::Type paramType = static_cast<QMetaType::Type>(metaMethod.parameterType(i));
-        QMetaType::Type argType = static_cast<QMetaType::Type>(copy.type());
+        auto paramType = static_cast<QMetaType::Type>(metaMethod.parameterType(i));
+        auto argType = static_cast<QMetaType::Type>(copy.type());
         bool paramIsVariant = (paramType == QMetaType::QVariant);
         bool needConversion = !paramIsVariant && (argType != paramType);
         if (needConversion) {
@@ -49,20 +49,17 @@ QVariant invokeAutoConvert(QObject* object, QMetaMethod metaMethod, QVariantList
 
     // build generic argument list from variant argument list
     QList<QGenericArgument> args_gen;
-    for (int i = 0; i < converted.size(); i++) {
-        QVariant& argument = converted[i];
-        QGenericArgument genericArgument(
-            QMetaType::typeName(argument.userType()),
-            const_cast<void*>(argument.constData())
-        );
-        args_gen << genericArgument;
+    for (const auto& argument: qAsConst(converted)) {
+        args_gen << QGenericArgument(QMetaType::typeName(argument.userType()),
+                                     const_cast<void*>(argument.constData()));
     }
 
     // build generic argument for return type
     QVariant returnValue;
-    QMetaType::Type returnType = static_cast<QMetaType::Type>(metaMethod.returnType());
-    if (returnType != QMetaType::Void && returnType != QMetaType::QVariant)
+    auto returnType = static_cast<QMetaType::Type>(metaMethod.returnType());
+    if (returnType != QMetaType::Void && returnType != QMetaType::QVariant) {
         returnValue = QVariant(metaMethod.returnType(), static_cast<void*>(nullptr));
+    }
     QGenericReturnArgument returnArgument(metaMethod.typeName(), const_cast<void*>(returnValue.constData()));
 
     // invoke method
@@ -75,9 +72,8 @@ QVariant invokeAutoConvert(QObject* object, QMetaMethod metaMethod, QVariantList
     if (!ok) {
         qWarning() << "Calling" << metaMethod.methodSignature() << "failed.";
         return QVariant();
-    } else {
-        return returnValue;
     }
+    return returnValue;
 }
 
 
@@ -86,7 +82,7 @@ QRpcServiceBase::QRpcServiceBase(QTcpServer* server, QObject *parent) : QObject(
     // new connection handler
     connect(server, &QTcpServer::newConnection, this, [this]() {
         QTcpSocket* socket;
-        while ((socket = m_server->nextPendingConnection())) {
+        while ((socket = m_server->nextPendingConnection()) != nullptr) {
             auto peer = new QRpcPeer(socket);
             // handle new rpc requests
             connect(peer, &QRpcPeer::newRequest, this, &QRpcService::handleNewRequest, Qt::QueuedConnection);  // TODO: direct connection causes memory corruption?
@@ -102,12 +98,9 @@ QRpcServiceBase::QRpcServiceBase(QTcpServer* server, QObject *parent) : QObject(
     });
 }
 
-QRpcServiceBase::~QRpcServiceBase()
-{
+QRpcServiceBase::~QRpcServiceBase() = default;
 
-}
-
-void QRpcServiceBase::registerObject(QString name, QObject *o)
+void QRpcServiceBase::registerObject(const QString& name, QObject* o)
 {
     m_reg_name_to_obj.emplace(std::make_pair(name, o));
     m_reg_obj_to_name.emplace(std::make_pair(o, name));
@@ -128,12 +121,12 @@ void QRpcServiceBase::registerObject(QString name, QObject *o)
     });
 }
 
-void QRpcServiceBase::unregisterObject(QString name)
+void QRpcServiceBase::unregisterObject(const QString& name)
 {
     // disconnect any signals from object to service and remove from map
     try {
         QObject* o = m_reg_name_to_obj.at(name);
-        disconnect(o, 0, this, 0);
+        disconnect(o, nullptr, this, nullptr);
         m_reg_name_to_obj.erase(name);
         m_reg_obj_to_name.erase(o);
     } catch (const std::out_of_range&) {
@@ -151,7 +144,7 @@ void QRpcServiceBase::handleNewRequest(QRpcRequest *request)
     QObject* o;
     try {
         o = m_reg_name_to_obj.at(obj_name);
-    } catch (const std::out_of_range& e) {
+    } catch (const std::out_of_range&) {
         request->setError("rpc object not found");
         request->deleteLater();
         return;
@@ -167,10 +160,11 @@ void QRpcServiceBase::handleNewRequest(QRpcRequest *request)
             QVariantList args;
             QVariant reqData = request->data();
             if (reqData.isValid()) {
-                if (reqData.type() == QVariant::Type::List)
+                if (reqData.type() == QVariant::Type::List) {
                     args = reqData.toList();
-                else
+                } else {
                     args.append(reqData);
+                }
             }
 			try {
 				retval = invokeAutoConvert(o, method, args);
@@ -209,16 +203,14 @@ QRpcService::QRpcService(QTcpServer *server, QObject *parent) : QRpcServiceBase(
     Q_ASSERT(QRpcService::s_id_handleRegisteredObjectSignal != -1);
 }
 
-QRpcService::~QRpcService()
-{
-
-}
+QRpcService::~QRpcService() = default;
 
 int QRpcService::qt_metacall(QMetaObject::Call c, int id, void **a)
 {
     // only handle calls to handleRegisteredObjectSignal, let parent qt_metacall do the rest
-    if (id != QRpcService::s_id_handleRegisteredObjectSignal)
+    if (id != QRpcService::s_id_handleRegisteredObjectSignal) {
         return QRpcServiceBase::qt_metacall(c, id, a);
+    }
 
     // inspect sender and signal
     QObject* o = sender();
@@ -227,12 +219,14 @@ int QRpcService::qt_metacall(QMetaObject::Call c, int id, void **a)
 
     // convert signal args to QVariantList
     QVariantList args;
-    for (int i = 0; i < signal.parameterCount(); ++i)
+    for (int i = 0; i < signal.parameterCount(); ++i) {
         args << QVariant(signal.parameterType(i), a[i+1]);
+    }
 
     // forward event to all peers
-    for (auto peer: m_peers)
+    for (auto peer: m_peers) {
         peer->sendEvent(event_name, args);
+    }
 
     return -1;
 }

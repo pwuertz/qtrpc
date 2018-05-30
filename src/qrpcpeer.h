@@ -19,15 +19,15 @@ public:
     /*
      * Create QRpcPeer on top of device.
      */
-    explicit QRpcPeer(QIODevice* device, QObject *parent = 0);
+    explicit QRpcPeer(QIODevice* device, QObject* parent = nullptr);
 
-    virtual ~QRpcPeer();
+    ~QRpcPeer() override;
 
 signals:
     /*
      * Received event from peer.
      */
-    void newEvent(QString name, QVariant data);
+    void newEvent(const QString& name, const QVariant& data);
 
     /*
      * Received request from peer.
@@ -45,13 +45,13 @@ public slots:
      * of the returned response object is emitted. This object should be destroyed
      * after that. It may also be destroyed before if the response is of no interest.
      */
-    QRpcResponse* sendRequest(QString method, QVariant data);
-    QRpcResponse* sendRequest(QString method, QVariantList data);
+    QRpcResponse* sendRequest(const QString& method, const QVariant& data);
+    QRpcResponse* sendRequest(const QString& method, const QVariantList& data);
 
     /*
      * Send event to the peer.
      */
-    void sendEvent(QString name, QVariant data=QVariant());
+    void sendEvent(const QString& name, const QVariant& data=QVariant());
 
     /*
      * Return the QIODevice the rpc peer is operating on.

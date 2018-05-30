@@ -35,13 +35,14 @@ public:
     void write(const char *data, qint64 n_data) {
         if (!m_buffer.isEmpty()) {
             // append new data to buffer if there is queued data
-            m_buffer.append(data, n_data);
+            m_buffer.append(data, static_cast<int>(n_data));
         } else {
             // try to write new data to device
             auto n_written = m_device->write(data, n_data);
             // append residual data to buffer
-            if (n_written < n_data)
-                m_buffer.append(data + n_written, n_data - n_written);
+            if (n_written < n_data) {
+                m_buffer.append(data + n_written, static_cast<int>(n_data - n_written));
+            }
         }
     }
 
@@ -70,10 +71,10 @@ public:
     std::map<std::uint64_t, QRpcRequest*> m_pending_requests;
 };
 
-QRpcPeer::QRpcPeer(QIODevice* device, QObject *parent) : QObject(parent)
+QRpcPeer::QRpcPeer(QIODevice* device, QObject *parent)
+    : QObject(parent)
+    , p(std::make_unique<Private>(this, device))
 {
-    p = std::unique_ptr<Private>(new Private(this, device));
-
     connect(device, &QIODevice::readyRead, this, [this]() {
         try {
             p->m_protocol.readAvailableBytes();
@@ -85,21 +86,19 @@ QRpcPeer::QRpcPeer(QIODevice* device, QObject *parent) : QObject(parent)
     });
 }
 
-QRpcPeer::~QRpcPeer()
-{
-}
+QRpcPeer::~QRpcPeer() = default;
 
-QRpcResponse* QRpcPeer::sendRequest(QString method, QVariantList data)
+QRpcResponse* QRpcPeer::sendRequest(const QString& method, const QVariantList& data)
 {
     return sendRequest(method, QVariant(data));
 }
 
-QRpcResponse* QRpcPeer::sendRequest(QString method, QVariant data)
+QRpcResponse* QRpcPeer::sendRequest(const QString& method, const QVariant& data)
 {
     // send request and create response
     std::uint64_t id = p->m_id_count++;
     p->m_protocol.sendRequest(method.toStdString(), data, id);
-    QRpcResponse* response = new QRpcResponse(id, this);
+    auto* response = new QRpcResponse(id, this);
 
     // add to pending responses, remove on object destruction
     p->m_pending_responses.emplace(std::make_pair(id, response));
@@ -110,7 +109,7 @@ QRpcResponse* QRpcPeer::sendRequest(QString method, QVariant data)
     return response;
 }
 
-void QRpcPeer::sendEvent(QString name, QVariant data)
+void QRpcPeer::sendEvent(const QString& name, const QVariant& data)
 {
     p->m_protocol.sendEvent(name.toStdString(), data);
 }
@@ -125,8 +124,9 @@ void QRpcPeer::Private::handleRequest(const std::string& method, const msgpack::
     QRpcRequest* request;
     // disconnect and thus remove previous requests in case of id conflicts
     auto request_iter = m_pending_requests.find(id);
-    if (request_iter != m_pending_requests.end())
-        request_iter->second->disconnect(request_iter->second, 0, b, 0);
+    if (request_iter != m_pending_requests.end()) {
+        request_iter->second->disconnect(request_iter->second, nullptr, b, nullptr);
+    }
 
     // create new pending request
     request = new QRpcRequest(QString::fromStdString(method), o.as<QVariant>(), id, b);
@@ -135,11 +135,12 @@ void QRpcPeer::Private::handleRequest(const std::string& method, const msgpack::
     // send reply/error when request is finished
     connect(request, &QRpcRequest::finished, b, [this, request]() {
         m_pending_requests.erase(request->m_id);
-        request->disconnect(request, 0, b, 0);
-        if (request->m_result_set)
+        request->disconnect(request, nullptr, b, nullptr);
+        if (request->m_result_set) {
             m_protocol.sendResponse(request->m_id, request->m_result);
-        else
+        } else {
             m_protocol.sendError(request->m_id, request->m_error.toStdString());
+        }
     });
 
     // remove request when deleted by the user
@@ -147,7 +148,7 @@ void QRpcPeer::Private::handleRequest(const std::string& method, const msgpack::
         m_pending_requests.erase(static_cast<QRpcRequest*>(o)->m_id);
     });
 
-    b->newRequest(request);
+    emit b->newRequest(request);
 }
 
 void QRpcPeer::Private::handleResponse(std::uint64_t id, const msgpack::object& o) {
@@ -172,9 +173,8 @@ void QRpcPeer::Private::handleError(std::uint64_t id, const std::string& e) {
     response->setError(QString::fromStdString(e));
 }
 
-void QRpcPeer::Private::handleEvent(const std::string& name_, const msgpack::object& o) {
-    QString name = QString::fromStdString(name_);
+void QRpcPeer::Private::handleEvent(const std::string& name, const msgpack::object& o) {
     QVariant v = o.as<QVariant>();
     // TODO: force queued connection here?
-    b->newEvent(name, v);
+    emit b->newEvent(QString::fromStdString(name), v);
 }

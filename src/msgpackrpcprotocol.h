@@ -52,7 +52,7 @@ inline void MsgpackRpcProtocol<IStream, OStream, Handler>::readAvailableBytes() 
             std::vector<msgpack::object> message;
             unpacked.get().convert(message);
             // determine message type and call the corresponding handler
-            MessageType type = static_cast<MessageType>(message.at(0).as<std::uint8_t>());
+            const auto type = static_cast<MessageType>(message.at(0).as<std::uint8_t>());
             switch (type) {
             case MessageType::Request:
                 // request: (type=request, method, args, id)
