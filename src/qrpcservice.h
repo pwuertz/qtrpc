@@ -3,12 +3,10 @@
 
 #include <QObject>
 #include <QTcpServer>
-#include <QString>
 #include <map>
 #include <set>
+#include "qrpcpeer.h"
 
-class QRpcRequest;
-class QRpcPeer;
 
 class QRpcServiceBase : public QObject
 {
@@ -30,9 +28,18 @@ public slots:
      */
     void unregisterObject(const QString& name);
 
+    /**
+     * @brief numberOfPeers Return the current number of connected peers.
+     * @return Number of peers.
+     */
+    size_t numberOfPeers() { return m_peers.size(); }
+
 protected:
     explicit QRpcServiceBase(QTcpServer* server, QObject* parent = nullptr);
-    void handleNewRequest(QRpcRequest* request);
+
+    void handleNewRequest(const QString& method, const QVariant& args,
+                          const QRpcPromise::Resolve& resolve, const QRpcPromise::Reject& reject);
+
     QTcpServer* m_server = nullptr;
     std::map<QString, QObject*> m_reg_name_to_obj;
     std::map<QObject*, QString> m_reg_obj_to_name;

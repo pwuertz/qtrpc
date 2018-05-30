@@ -7,23 +7,21 @@
 #include <QTimer>
 #include <QByteArray>
 #include <QDebug>
-#include "qrpcrequest.h"
-#include "qrpcresponse.h"
 
 
 class WriteBuffer {
-    // TODO: this should be implemented as ring buffer
+    // TODO: This should be implemented as ring buffer
 public:
     WriteBuffer(QIODevice* device, QObject* ctx) : m_device(device) {
         QObject::connect(device, &QIODevice::bytesWritten, ctx, [this](){
-            // device finished writing, check for buffered data
+            // Device finished writing, check for buffered data
             if (!m_buffer.isEmpty()) {
-                // try to write buffered data to device
-                auto n_buffer = m_buffer.size();
+                // Try to write buffered data to device
+                int n_buffer = m_buffer.size();
                 const char* p = m_buffer.constData() + m_buffer_pos;
-                auto n_written = m_device->write(p, n_buffer - m_buffer_pos);
+                qint64 n_written = m_device->write(p, n_buffer - m_buffer_pos);
                 m_buffer_pos += n_written;
-                // clear buffer when done
+                // Clear buffer when done
                 if (m_buffer_pos == n_buffer) {
                     m_buffer.clear();
                     m_buffer_pos = 0;
@@ -34,41 +32,51 @@ public:
 
     void write(const char *data, qint64 n_data) {
         if (!m_buffer.isEmpty()) {
-            // append new data to buffer if there is queued data
+            // Append new data to buffer if there is queued data
             m_buffer.append(data, static_cast<int>(n_data));
         } else {
-            // try to write new data to device
+            // Try to write new data to device
             auto n_written = m_device->write(data, n_data);
-            // append residual data to buffer
+            // Append residual data to buffer
             if (n_written < n_data) {
                 m_buffer.append(data + n_written, static_cast<int>(n_data - n_written));
             }
         }
     }
 
+    qint64 m_buffer_pos = 0;
     QIODevice* m_device;
     QByteArray m_buffer;
-    int m_buffer_pos = 0;
 };
 
 
 class QRpcPeer::Private {
 public:
-    Private(QRpcPeer* base, QIODevice* device) :
-        b(base), m_device(device), m_buffered_device(device, base), m_protocol(*device, m_buffered_device, *this) {}
+    Private(QRpcPeer* base, QIODevice* device)
+        : b(base)
+        , m_device(device)
+        , m_buffered_device(device, base)
+        , m_protocol(*device, m_buffered_device, *this)
+    {
+        // Register QRpcPromise once
+        [[maybe_unused]] static int promiseTypeId = qRegisterMetaType<QRpcPromise>();
+    }
 
     void handleRequest(const std::string& method, const msgpack::object& o, std::uint64_t id);
     void handleResponse(std::uint64_t id, const msgpack::object& o);
     void handleError(std::uint64_t id, const std::string& e);
     void handleEvent(const std::string& name, const msgpack::object& o);
 
-    QRpcPeer* b;
-    QIODevice* m_device;
+    void cancelPendingResponses();
+
+    QRpcPeer* b = nullptr;
+    QIODevice* m_device = nullptr;
     WriteBuffer m_buffered_device;
     MsgpackRpcProtocol<QIODevice, WriteBuffer, Private> m_protocol;
     std::uint64_t m_id_count = 1;
-    std::map<std::uint64_t, QRpcResponse*> m_pending_responses;
-    std::map<std::uint64_t, QRpcRequest*> m_pending_requests;
+
+    using Resolvers = std::tuple<QRpcPromise::Resolve, QRpcPromise::Reject>;
+    std::map<std::uint64_t, Resolvers> m_pending_responses;
 };
 
 QRpcPeer::QRpcPeer(QIODevice* device, QObject *parent)
@@ -79,34 +87,34 @@ QRpcPeer::QRpcPeer(QIODevice* device, QObject *parent)
         try {
             p->m_protocol.readAvailableBytes();
         } catch (const std::runtime_error& e) {
-            // close stream on error
+            // Close stream on error
             qWarning() << "QRpcPeer:" << e.what();
             p->m_device->close();
         }
     });
+    // TODO: Cancel pending responses if device is closed/finished
 }
 
-QRpcPeer::~QRpcPeer() = default;
-
-QRpcResponse* QRpcPeer::sendRequest(const QString& method, const QVariantList& data)
+QRpcPeer::~QRpcPeer()
 {
-    return sendRequest(method, QVariant(data));
+    p->cancelPendingResponses();
+};
+
+QRpcPromise QRpcPeer::sendRequest(const QString& method, const QVariantList& args)
+{
+    return sendRequest(method, QVariant::fromValue(args));
 }
 
-QRpcResponse* QRpcPeer::sendRequest(const QString& method, const QVariant& data)
+QRpcPromise QRpcPeer::sendRequest(const QString& method, const QVariant& arg)
 {
-    // send request and create response
+    // Send request to peer
     std::uint64_t id = p->m_id_count++;
-    p->m_protocol.sendRequest(method.toStdString(), data, id);
-    auto* response = new QRpcResponse(id, this);
+    p->m_protocol.sendRequest(method.toStdString(), arg, id);
 
-    // add to pending responses, remove on object destruction
-    p->m_pending_responses.emplace(std::make_pair(id, response));
-    connect(response, &QRpcResponse::destroyed, this, [this](QObject* o) {
-        p->m_pending_responses.erase(static_cast<QRpcResponse*>(o)->m_id);
+    // Create promise for pending response
+    return QRpcPromise([&](const QRpcPromise::Resolve& resolve, const QRpcPromise::Reject& reject) {
+        p->m_pending_responses.try_emplace(id, resolve, reject);
     });
-
-    return response;
 }
 
 void QRpcPeer::sendEvent(const QString& name, const QVariant& data)
@@ -121,60 +129,59 @@ QIODevice* QRpcPeer::device()
 
 void QRpcPeer::Private::handleRequest(const std::string& method, const msgpack::object& o, std::uint64_t id)
 {
-    QRpcRequest* request;
-    // disconnect and thus remove previous requests in case of id conflicts
-    auto request_iter = m_pending_requests.find(id);
-    if (request_iter != m_pending_requests.end()) {
-        request_iter->second->disconnect(request_iter->second, nullptr, b, nullptr);
-    }
-
-    // create new pending request
-    request = new QRpcRequest(QString::fromStdString(method), o.as<QVariant>(), id, b);
-    m_pending_requests.emplace(std::make_pair(id, request));
-
-    // send reply/error when request is finished
-    connect(request, &QRpcRequest::finished, b, [this, request]() {
-        m_pending_requests.erase(request->m_id);
-        request->disconnect(request, nullptr, b, nullptr);
-        if (request->m_result_set) {
-            m_protocol.sendResponse(request->m_id, request->m_result);
-        } else {
-            m_protocol.sendError(request->m_id, request->m_error.toStdString());
+    QPointer<QRpcPeer> peer(b);
+    auto p = QRpcPromise([&](const QRpcPromise::Resolve& resolve, const QRpcPromise::Reject& reject) {
+        // Emit signal for new request, forwarding resolvers
+        emit b->newRequest(QString::fromStdString(method), o.as<QVariant>(), resolve, reject);
+    }).then([peer, id](const QVariant& result) {
+        // Send reply once resolved
+        if (!peer.isNull()) {
+            peer->p->m_protocol.sendResponse(id, result);
+        }
+    }).fail([peer, id](const std::exception& e) {
+        // Send error if request was rejected
+        if (!peer.isNull()) {
+            peer->p->m_protocol.sendError(id, e.what());
         }
     });
-
-    // remove request when deleted by the user
-    connect(request, &QRpcRequest::destroyed, b, [this](QObject* o) {
-        m_pending_requests.erase(static_cast<QRpcRequest*>(o)->m_id);
-    });
-
-    emit b->newRequest(request);
+    // TODO: Track pending requests somewhere?
 }
 
 void QRpcPeer::Private::handleResponse(std::uint64_t id, const msgpack::object& o) {
-    QRpcResponse* response;
-    try {
-        response = m_pending_responses.at(id);
-        m_pending_responses.erase(id);
-    } catch (std::out_of_range) {
+    // Find pending response, ignore response if response ID is unknown
+    auto response_iter = m_pending_responses.find(id);
+    if (response_iter == m_pending_responses.end()) {
         return;
     }
-    response->setResult(o.as<QVariant>());
+    std::get<0>(response_iter->second)(o.as<QVariant>());  // Call resolve
+    m_pending_responses.erase(response_iter);
 }
 
 void QRpcPeer::Private::handleError(std::uint64_t id, const std::string& e) {
-    QRpcResponse* response;
-    try {
-        response = m_pending_responses.at(id);
-        m_pending_responses.erase(id);
-    } catch (std::out_of_range) {
+    // Find pending response, ignore response if response ID is unknown
+    auto response_iter = m_pending_responses.find(id);
+    if (response_iter == m_pending_responses.end()) {
         return;
     }
-    response->setError(QString::fromStdString(e));
+    std::get<1>(response_iter->second)(std::runtime_error(e));  // Call reject
+    m_pending_responses.erase(response_iter);
 }
 
 void QRpcPeer::Private::handleEvent(const std::string& name, const msgpack::object& o) {
     QVariant v = o.as<QVariant>();
     // TODO: force queued connection here?
     emit b->newEvent(QString::fromStdString(name), v);
+}
+
+void QRpcPeer::Private::cancelPendingResponses()
+{
+    for (const auto& kv: m_pending_responses) {
+        std::get<1>(kv.second)(std::runtime_error("QRpcPeer destroyed before response"));
+    }
+    m_pending_responses.clear();
+}
+
+void QRpcPromise::__compilerGuide__()
+{
+    /* This method is only a hint for the compiler to find a translation unit for QRpcPromise */
 }

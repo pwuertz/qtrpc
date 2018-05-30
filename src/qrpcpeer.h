@@ -5,19 +5,37 @@
 #include <QString>
 #include <QVariant>
 #include <memory>
+#include <QtPromise>
 
-class QRpcRequest;
-class QRpcResponse;
 class QIODevice;
+
+class QRpcPromise : public QtPromise::QPromise<QVariant>
+{
+public:
+    using Resolve = QtPromise::QPromiseResolve<QVariant>;
+    using Reject = QtPromise::QPromiseReject<QVariant>;
+
+    QRpcPromise()
+        : QtPromise::QPromise<QVariant>([](const Resolve& r) { r(QVariant{}); })
+    { }
+
+    template <typename F>
+    QRpcPromise(F&& resolver) : QtPromise::QPromise<QVariant>(std::forward<F>(resolver)) { }
+
+private:
+    virtual void __compilerGuide__();
+};
+Q_DECLARE_METATYPE(QRpcPromise)
 
 
 class QRpcPeer : public QObject
 {
     Q_OBJECT
 public:
-
-    /*
-     * Create QRpcPeer on top of device.
+    /**
+     * @brief QRpcPeer Create new QRpcPeer operating on existing IO device.
+     * @param device IO device for reading/writing.
+     * @param parent QObject parent.
      */
     explicit QRpcPeer(QIODevice* device, QObject* parent = nullptr);
 
@@ -29,32 +47,40 @@ signals:
      */
     void newEvent(const QString& name, const QVariant& data);
 
-    /*
-     * Received request from peer.
-     * After processing the request the result or an error is returned to
-     * the peer by calling QRpcRequest::setResult or QRpcRequest::setError.
-     * After that the request object should be deleted.
+    /**
+     * @brief newRequest Received new request from connected peer.
+     * @param method Request method name.
+     * @param args Request arguments.
+     * @param resolve Request resolver.
+     * @param reject Request rejecter.
      */
-    void newRequest(QRpcRequest* request);
+    void newRequest(const QString& method, const QVariant& args,
+                    const QRpcPromise::Resolve& resolve, const QRpcPromise::Reject& reject);
 
 public slots:
-
-    /*
-     * Send request to the peer.
-     * When the peer replies to the request the QRpcResponse::finished signal
-     * of the returned response object is emitted. This object should be destroyed
-     * after that. It may also be destroyed before if the response is of no interest.
+    /**
+     * @brief sendRequest Send request to peer.
+     * @param method Request method.
+     * @param arg Request argument(s).
+     * @return Promise fulfilled once the request finished.
      */
-    QRpcResponse* sendRequest(const QString& method, const QVariant& data);
-    QRpcResponse* sendRequest(const QString& method, const QVariantList& data);
+    QRpcPromise sendRequest(const QString& method, const QVariant& arg=QVariant());
 
-    /*
-     * Send event to the peer.
+    /**
+     * Overloaded method for sending multiple request arguments.
+     */
+    QRpcPromise sendRequest(const QString& method, const QVariantList& args);
+
+    /**
+     * @brief sendEvent Send event to peer.
+     * @param name Event name.
+     * @param data Event data.
      */
     void sendEvent(const QString& name, const QVariant& data=QVariant());
 
-    /*
-     * Return the QIODevice the rpc peer is operating on.
+    /**
+     * @brief device Return the QIODevice the rpc peer is operating on.
+     * @return IO device.
      */
     QIODevice* device();
 
