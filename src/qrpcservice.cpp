@@ -183,7 +183,7 @@ void QRpcServiceBase::handleNewRequest(const QString& method, const QVariant& ar
                 returnVal = invokeAutoConvert(o, mm, callArgs);
 			}
             catch (const std::exception& e) {
-                reject(e);
+                reject(std::runtime_error(e.what()));
             }
             catch (...) {
                 reject(std::runtime_error("Unknown exception"));
@@ -194,11 +194,11 @@ void QRpcServiceBase::handleNewRequest(const QString& method, const QVariant& ar
             if (!isRpcPromise) {
                 resolve(returnVal);
             } else {
-                const auto* p = reinterpret_cast<const QRpcPromise*>(returnVal.constData());
-                p->then([=](const QVariant& result) {
+                const auto& p = *reinterpret_cast<const QRpcPromise*>(returnVal.constData());
+                p.then([=](const QVariant& result) {
                     resolve(result);
                 }, [=](const std::exception& e) {
-                    reject(e);
+                    reject(std::runtime_error(e.what()));
                 });
             }
             return;
