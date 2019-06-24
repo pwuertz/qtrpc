@@ -19,7 +19,7 @@ public:
         : QtPromise::QPromise<QVariant>([](const Resolve& r) { r(QVariant{}); })
     { }
 
-    template <typename F>
+    template <typename F, typename = std::enable_if_t<!std::is_same_v<F, QRpcPromise>>>
     QRpcPromise(F&& resolver) : QtPromise::QPromise<QVariant>(std::forward<F>(resolver)) { }
 
 private:
@@ -143,7 +143,7 @@ struct QRpcRequestMap
      */
     QtPromise::QPromise<QVariantMap> all()
     {
-        auto p = QtPromise::QPromise<QVariant>::all(m_requests);
+        auto p = QtPromise::all(m_requests);
         m_requests.clear();
         return p.then([keys=std::move(m_keys)](const QVector<QVariant>& vals) {
             QVariantMap map;
