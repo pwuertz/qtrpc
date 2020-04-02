@@ -98,7 +98,7 @@ QRpcPeer::QRpcPeer(QIODevice* device, QObject *parent)
 QRpcPeer::~QRpcPeer()
 {
     p->cancelPendingResponses();
-};
+}
 
 QRpcPromise QRpcPeer::sendRequest(const QString& method, const QVariantList& args)
 {
