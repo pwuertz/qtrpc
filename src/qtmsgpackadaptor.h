@@ -4,7 +4,9 @@
 #include <QtCore/QVariant>
 #include <QtCore/QString>
 #include <QtCore/QByteArray>
+#ifdef QTMSGPACK_ADAPTER_WITH_QML
 #include <QtQml/QJSValue>
+#endif
 #include <msgpack.hpp>
 
 namespace msgpack {
@@ -80,9 +82,11 @@ MSGPACK_API_VERSION_NAMESPACE(MSGPACK_DEFAULT_API_NS) {
                 return o.pack(v.toByteArray());
             }
             // Additional runtime dependent types
+#ifdef QTMSGPACK_ADAPTER_WITH_QML
             if (typeId == qMetaTypeId<QJSValue>()) {
                 return o.pack(reinterpret_cast<const QJSValue*>(v.data())->toVariant());
             }
+#endif
             // Failed to serialize value, print warning and pack null
             const char* typeName = QMetaType::typeName(v.userType());
             qWarning() << "qtmsgpackadaptor: no conversion for" << typeName;
