@@ -1,12 +1,11 @@
-#include "qrpcpeer.h"
-#include "msgpackrpcprotocol.h"
-#include "qtmsgpackadaptor.h"
-
+#include <QRpcPeer.hpp>
+#include <QtCore/QIODevice>
+#include <QtCore/QTimer>
+#include <QtCore/QByteArray>
+#include <QtCore/QDebug>
+#include "MsgpackRpcProtocol.hpp"
+#include "QtMsgpackAdaptor.hpp"
 #include <cstdint>
-#include <QIODevice>
-#include <QTimer>
-#include <QByteArray>
-#include <QDebug>
 
 
 class WriteBuffer {
@@ -112,9 +111,9 @@ QRpcPromise QRpcPeer::sendRequest(const QString& method, const QVariant& arg)
     p->m_protocol.sendRequest(method.toStdString(), arg, id);
 
     // Create promise for pending response
-    return QRpcPromise([&](const QRpcPromise::Resolve& resolve, const QRpcPromise::Reject& reject) {
+    return [&](const QRpcPromise::Resolve& resolve, const QRpcPromise::Reject& reject) {
         p->m_pending_responses.try_emplace(id, resolve, reject);
-    });
+    };
 }
 
 void QRpcPeer::sendEvent(const QString& name, const QVariant& data)
@@ -181,7 +180,7 @@ void QRpcPeer::Private::cancelPendingResponses()
     m_pending_responses.clear();
 }
 
-void QRpcPromise::__compilerGuide__()
+void QRpcPromise::_compilerGuide_()
 {
     /* This method is only a hint for the compiler to find a translation unit for QRpcPromise */
 }

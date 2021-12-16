@@ -1,6 +1,6 @@
 #include <QtTest/QtTest>
-#include <qrpcpeer.h>
-#include <qrpcservice.h>
+#include <QRpcPeer.hpp>
+#include <QRpcService.hpp>
 
 
 class RpcObject : public QObject

@@ -1,6 +1,4 @@
-#ifndef MSGPACKRPCPROTOCOL_H
-#define MSGPACKRPCPROTOCOL_H
-
+#pragma once
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -120,6 +118,3 @@ inline void MsgpackRpcProtocol<IStream, OStream, Handler>::sendEvent(const std::
     m_packer.pack(name);
     m_packer.pack(v);
 }
-
-
-#endif // MSGPACKRPCPROTOCOL_H

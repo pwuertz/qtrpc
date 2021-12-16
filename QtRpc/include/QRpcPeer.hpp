@@ -1,15 +1,14 @@
-#ifndef QRPCPEER_H
-#define QRPCPEER_H
-
-#include <QObject>
-#include <QString>
-#include <QVariant>
-#include <memory>
+#pragma once
+#include <QtRpc_export.hpp>
+#include <QtCore/QObject>
+#include <QtCore/QString>
+#include <QtCore/QVariant>
 #include <QtPromise>
+#include <memory>
 
 class QIODevice;
 
-class QRpcPromise : public QtPromise::QPromise<QVariant>
+class QTRPC_EXPORT QRpcPromise : public QtPromise::QPromise<QVariant>
 {
 public:
     using Resolve = QtPromise::QPromiseResolve<QVariant>;
@@ -23,14 +22,15 @@ public:
     QRpcPromise(F&& resolver) : QtPromise::QPromise<QVariant>(std::forward<F>(resolver)) { }
 
 private:
-    virtual void __compilerGuide__();
+    virtual void _compilerGuide_();
 };
 Q_DECLARE_METATYPE(QRpcPromise)
 
 
-class QRpcPeer : public QObject
+class QTRPC_EXPORT QRpcPeer : public QObject
 {
     Q_OBJECT
+
 public:
     /**
      * @brief QRpcPeer Create new QRpcPeer operating on existing IO device.
@@ -41,7 +41,7 @@ public:
 
     ~QRpcPeer() override;
 
-signals:
+Q_SIGNALS:
     /*
      * Received event from peer.
      */
@@ -57,7 +57,7 @@ signals:
     void newRequest(const QString& method, const QVariant& args,
                     const QRpcPromise::Resolve& resolve, const QRpcPromise::Reject& reject);
 
-public slots:
+public Q_SLOTS:
     /**
      * @brief sendRequest Send request to peer.
      * @param method Request method.
@@ -93,7 +93,7 @@ private:
 /**
  * @brief QRpcRequestMap conveniently batches multiple requests and returns them as QVariantMap.
  */
-struct QRpcRequestMap
+struct QTRPC_EXPORT QRpcRequestMap
 {
     /**
      * @brief QRpcRequestMap Create request map for given peer.
@@ -187,5 +187,3 @@ private:
     std::list<QString> m_keys;
     std::list<QtPromise::QPromise<QVariant>> m_requests;
 };
-
-#endif // QRPCPEER_H

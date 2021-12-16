@@ -1,20 +1,20 @@
-#ifndef QRPCSERVICE_H
-#define QRPCSERVICE_H
-
-#include <QObject>
-#include <QTcpServer>
+#pragma once
+#include <QtRpc_export.hpp>
+#include <QRpcPeer.hpp>
+#include <QtCore/QObject>
+#include <QtNetwork/QTcpServer>
 #include <map>
 #include <set>
-#include "qrpcpeer.h"
 
 
-class QRpcServiceBase : public QObject
+class QTRPC_EXPORT QRpcServiceBase : public QObject
 {
     Q_OBJECT
+
 public:
     ~QRpcServiceBase() override;
 
-public slots:
+public Q_SLOTS:
     /**
      * @brief registerObject Register a QObject for dispatching received RPC requests to it.
      * @param name Name for routing RPC requests.
@@ -45,11 +45,11 @@ protected:
     std::map<QObject*, QString> m_reg_obj_to_name;
     std::set<QRpcPeer*> m_peers;
 
-protected slots:
+protected Q_SLOTS:
     void handleRegisteredObjectSignal();
 };
 
-class QRpcService : public QRpcServiceBase
+class QTRPC_EXPORT QRpcService : public QRpcServiceBase
 {
 public:
     explicit QRpcService(QTcpServer* server, QObject* parent = nullptr);
@@ -59,5 +59,3 @@ public:
 private:
     static int s_id_handleRegisteredObjectSignal;
 };
-
-#endif // QRPCSERVICE_H
