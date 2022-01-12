@@ -30,8 +30,8 @@ namespace adaptor {
 template<> struct pack<QVariant> {
     template <typename Stream>
     inline packer<Stream>& operator()(msgpack::packer<Stream>& o, QVariant const& v) const {
-        const auto typeId = v.userType();
-        switch (typeId) {
+        const auto valueType = v.metaType();
+        switch (valueType.id()) {
         case QMetaType::UnknownType:
         case QMetaType::Void:
             return o.pack_nil();
@@ -82,13 +82,12 @@ template<> struct pack<QVariant> {
         }
         // Additional runtime dependent types
 #ifdef QTMSGPACK_ADAPTER_WITH_QML
-        if (typeId == qMetaTypeId<QJSValue>()) {
+        if (valueType == QMetaType::fromType<QJSValue>()) {
             return o.pack(reinterpret_cast<const QJSValue*>(v.data())->toVariant());
         }
 #endif
         // Failed to serialize value, print warning and pack null
-        const char* typeName = QMetaType::typeName(v.userType());
-        qWarning() << "qtmsgpackadaptor: no conversion for" << typeName;
+        qWarning() << "qtmsgpackadaptor: no conversion for" << valueType.name();
         return o.pack_nil();
     }
 };

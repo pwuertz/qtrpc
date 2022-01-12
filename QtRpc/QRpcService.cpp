@@ -19,27 +19,27 @@ QVariant invokeAutoConvert(QObject* object, const QMetaMethod& metaMethod, const
     for (int i = 0; i < metaMethod.parameterCount(); i++) {
         const QVariant& arg = args.at(i);
         auto copy = QVariant{arg};
-        auto paramType = static_cast<QMetaType::Type>(metaMethod.parameterType(i));
-        auto argType = static_cast<QMetaType::Type>(copy.type());
-        bool paramIsVariant = (paramType == QMetaType::QVariant);
+        const auto paramType = metaMethod.parameterMetaType(i);
+        const auto argType = copy.metaType();
+        bool paramIsVariant = (paramType.id() == QMetaType::QVariant);
         bool needConversion = !paramIsVariant && (argType != paramType);
         if (needConversion) {
             if (!copy.canConvert(paramType)) {
                 // Special treatment for ->double conversion (e.g. long to double not allowed)
-                if (paramType == QMetaType::Double) {
+                if (paramType.id() == QMetaType::Double) {
                     bool ok;
                     copy = copy.toDouble(&ok);
                     if (!ok) {
-                        qWarning() << "Cannot convert" << arg.typeName() << "to" << QMetaType::typeName(paramType);
+                        qWarning() << "Cannot convert" << arg.typeName() << "to" << paramType.name();
                         return {};
                     }
                 } else {
-                    qWarning() << "Cannot convert" << arg.typeName() << "to" << QMetaType::typeName(paramType);
+                    qWarning() << "Cannot convert" << arg.typeName() << "to" << paramType.name();
                     return {};
                 }
             }
             if (!copy.convert(paramType)) {
-                qWarning() << "Error converting" << arg.typeName() << "to" << QMetaType::typeName(paramType);
+                qWarning() << "Error converting" << arg.typeName() << "to" << paramType.name();
                 return {};
             }
         }
@@ -49,12 +49,10 @@ QVariant invokeAutoConvert(QObject* object, const QMetaMethod& metaMethod, const
     // Build generic argument list from variant argument list
     QList<QGenericArgument> args_gen;
     for (const auto& argument: qAsConst(converted)) {
-        args_gen << QGenericArgument(QMetaType::typeName(argument.userType()),
-                                     const_cast<void*>(argument.constData()));
+        args_gen << QGenericArgument(argument.metaType().name(), const_cast<void*>(argument.constData()));
     }
 
     // Build generic argument for return type
-#if QT_VERSION_MAJOR >= 6
     const auto methodReturnT = metaMethod.returnMetaType();
     const auto methodReturnTID = methodReturnT.id();
     QVariant returnValue;
@@ -71,23 +69,6 @@ QVariant invokeAutoConvert(QObject* object, const QMetaMethod& metaMethod, const
         // Ignore other return values
         return {"void", &returnValue};
     }();
-#else
-    auto methodReturnT = static_cast<QMetaType::Type>(metaMethod.returnType());
-    QVariant returnValue;
-    QGenericReturnArgument returnArgument = [&]() -> QGenericReturnArgument {
-      if (methodReturnT != QMetaType::UnknownType && methodReturnT != QMetaType::QVariant && methodReturnT != QMetaType::Void) {
-        // Create QVariant for known metatype and direct return value to internal data
-        returnValue = QVariant(methodReturnT, static_cast<void*>(nullptr));
-        return {metaMethod.typeName(), const_cast<void*>(returnValue.constData())};
-      }
-      if (methodReturnT == QMetaType::QVariant) {
-        // Write QVariant return values directly to returnValue
-        return {metaMethod.typeName(), &returnValue};
-      }
-      // Ignore other return values
-      return {"void", &returnValue};
-    }();
-#endif
 
     // Invoke method
     bool ok = metaMethod.invoke(object, Qt::DirectConnection, returnArgument,
@@ -192,7 +173,7 @@ void QRpcServiceBase::handleNewRequest(
             QVariant returnVal;
             QVariantList callArgs;
             if (args.isValid()) {
-                if (args.type() == QVariant::Type::List) {
+                if (args.metaType().id() == QMetaType::QVariantList) {
                     callArgs = args.toList();
                 } else {
                     callArgs.append(args);
@@ -209,8 +190,7 @@ void QRpcServiceBase::handleNewRequest(
                 reject(std::runtime_error("Unknown exception"));
             }
             // Resolve if return value is not an RPC promise or build chain
-            const bool isRpcPromise = (returnVal.type() == QVariant::UserType) &&
-                    (returnVal.userType() == qMetaTypeId<QRpcPromise>());
+            const bool isRpcPromise = (returnVal.metaType() == QMetaType::fromType<QRpcPromise>());
             if (!isRpcPromise) {
                 resolve(returnVal);
             } else {
@@ -258,11 +238,7 @@ int QRpcService::qt_metacall(QMetaObject::Call c, int id, void **a)
     // Convert signal args to QVariantList
     QVariantList args;
     for (int i = 0; i < signal.parameterCount(); ++i) {
-#if QT_VERSION_MAJOR >= 6
         args << QVariant(signal.parameterMetaType(i), a[i+1]);
-#else
-        args << QVariant(signal.parameterType(i), a[i+1]);
-#endif
     }
 
     // Forward event to all peers

@@ -7,24 +7,20 @@ if(DEFINED PROJECT_NAME)
         )
 endif()
 
-project("QtRpc" VERSION 1.0 LANGUAGES C CXX)
+project("QtRpc" VERSION 1.0 LANGUAGES CXX)
 
 # Project standards
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_compile_definitions(QT_DISABLE_DEPRECATED_BEFORE=0x050F00)
-if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    add_compile_options(-Werror -Wall -Wextra -Wpedantic)
+
+add_compile_definitions(QT_DISABLE_DEPRECATED_BEFORE=0x060000)
+if(NOT MSVC)
+    add_compile_options(-Werror -Wall -Wextra -Wpedantic -Wdeprecated-declarations)
 endif()
 
 # Choose Qt version
 if(NOT DEFINED QT_PACKAGE)
-    find_package(Qt6 COMPONENTS Core QUIET)
-    if(Qt6_FOUND)
-        set(QT_PACKAGE "Qt6")
-    else()
-        set(QT_PACKAGE "Qt5")
-    endif()
+    set(QT_PACKAGE "Qt6")
 endif()
 
 # Conan CMake support
