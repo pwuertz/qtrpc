@@ -35,7 +35,7 @@ endif()
 # Install requirements from Conan
 include(conan)
 conan_cmake_configure(
-    REQUIRES msgpack/3.3.0
+    REQUIRES msgpack-cxx
     GENERATORS cmake_find_package
     )
 conan_cmake_autodetect(settings)

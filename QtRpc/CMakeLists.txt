@@ -1,5 +1,5 @@
 find_package(${QT_PACKAGE} COMPONENTS Core Network REQUIRED)
-find_package(msgpack REQUIRED)
+find_package(msgpack-cxx REQUIRED)
 
 
 add_library(QtRpc)
@@ -23,7 +23,7 @@ target_include_directories(QtRpc PUBLIC
 target_link_libraries(QtRpc PUBLIC
     ${QT_PACKAGE}::Core
     ${QT_PACKAGE}::Network
-    msgpack::msgpack
+    msgpack-cxx
     qtpromise::qtpromise
     )
 
